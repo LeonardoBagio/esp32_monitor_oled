@@ -17,6 +17,8 @@ u8g2_t u8g2;
 QueueHandle_t bufferTemperatura; 
 
 void app_main (void);
+void imprimirCabecalho(void);
+void imprimirGrafico(int eixoX, int eixoY, int valor);
 void task_dht(void *pvParamters);
 void task_oLED(void *pvParameters);
 
@@ -69,22 +71,33 @@ void task_oLED(void *pvParameters)
 	u8g2_SetPowerSave(&u8g2, 0);
 
     u8g2_ClearBuffer(&u8g2);
-    u8g2_DrawFrame(&u8g2, 0, 0, 128, 64);
     u8g2_SetFont(&u8g2,u8g2_font_6x10_mf);
-    u8g2_DrawUTF8(&u8g2,15,15,"IoT Aplicada");
+    
     u8g2_SendBuffer(&u8g2);
     uint16_t temp;
     char stringTemperatura[10];
     while(1)
     {
         xQueueReceive(bufferTemperatura,&temp,pdMS_TO_TICKS(2000));
-        u8g2_DrawUTF8(&u8g2,15,30,"Umidade (%): ");
-        sprintf(stringTemperatura,"%d",temp);
-        u8g2_DrawUTF8(&u8g2,80,30,stringTemperatura);
-        u8g2_SendBuffer(&u8g2);
-        vTaskDelay(100/portTICK_PERIOD_MS);
-        u8g2_DrawBox(&u8g2, 0, 0, 5, 100);
+        
+        imprimirCabecalho();
+        u8g2_DrawUTF8(&u8g2, 15, 30, "Umidade (%): ");
+        sprintf(stringTemperatura, "%d", temp);
+        u8g2_DrawUTF8(&u8g2, 80, 30, stringTemperatura);
+        imprimirGrafico(15, 30, temp);
     }
+}
+
+void imprimirCabecalho() {
+    u8g2_DrawUTF8(&u8g2, 15, 15, "IoT Aplicada");
+    u8g2_DrawFrame(&u8g2, 0, 0, 128, 64);
+}
+
+void imprimirGrafico(int eixoX, int eixoY, int valor){
+    u8g2_DrawBox(&u8g2, eixoX, eixoY, valor, 5);
+    u8g2_SendBuffer(&u8g2);
+    u8g2_DrawBox(&u8g2, 0, 0, 0, 0);
+    u8g2_ClearBuffer(&u8g2);    
 }
 
 void app_main() {
