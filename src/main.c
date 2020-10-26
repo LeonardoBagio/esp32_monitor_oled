@@ -16,12 +16,10 @@ static const gpio_num_t dht_gpio = DHT_GPIO;
 u8g2_t u8g2;
 QueueHandle_t bufferTemperatura; 
 
-/* Protótipos de Funções */
 void app_main (void);
 void task_dht(void *pvParamters);
 void task_oLED(void *pvParameters);
 
-/* Tarefas */
 void task_dht(void *pvParamters)
 {
     int16_t temperatura;
@@ -29,8 +27,10 @@ void task_dht(void *pvParamters)
     gpio_set_pull_mode( dht_gpio , GPIO_PULLUP_ONLY);
     while(1)
     {
-        umidade     = esp_random()/1000000;
-        temperatura = esp_random()/1000000;
+        umidade     = esp_random()/100000000;
+        temperatura = esp_random()/100000000;
+
+        xQueueSend(bufferTemperatura,&temperatura,pdMS_TO_TICKS(0));
 
         ESP_LOGI(TAG,"Umidade %d%% e Temperatura %dºC", umidade, temperatura );
 
@@ -53,26 +53,19 @@ void task_dht(void *pvParamters)
 
 void task_oLED(void *pvParameters)
 {
-    // initialize the u8g2 hal
 	u8g2_esp32_hal_t u8g2_esp32_hal = U8G2_ESP32_HAL_DEFAULT;
 	u8g2_esp32_hal.sda = PIN_SDA;
 	u8g2_esp32_hal.scl = PIN_SCL;
 	u8g2_esp32_hal_init(u8g2_esp32_hal);
 
-	// initialize the u8g2 library
 	u8g2_Setup_ssd1306_i2c_128x64_noname_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,
 		u8g2_esp32_gpio_and_delay_cb);
 	
-	// set the display address
 	u8x8_SetI2CAddress(&u8g2.u8x8, 0x78); 
-	
-	// initialize the display
 	u8g2_InitDisplay(&u8g2);
-	
-	// wake up the display
 	u8g2_SetPowerSave(&u8g2, 0);
 
     u8g2_ClearBuffer(&u8g2);
@@ -90,12 +83,12 @@ void task_oLED(void *pvParameters)
         u8g2_DrawUTF8(&u8g2,80,30,stringTemperatura);
         u8g2_SendBuffer(&u8g2);
         vTaskDelay(100/portTICK_PERIOD_MS);
+        u8g2_DrawBox(&u8g2, 0, 0, 5, 100);
     }
 }
 
 void app_main() {
     bufferTemperatura = xQueueCreate(5,sizeof(uint16_t)); 
-    ESP_LOGI(TAG, "Inicio...");
     xTaskCreate(task_dht,"task_dht",2048,NULL,1,NULL);
     xTaskCreate(task_oLED,"task_oLED",2048, NULL, 2, NULL);
 }
