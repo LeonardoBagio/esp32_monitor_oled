@@ -64,7 +64,7 @@ void task_dht(void *pvParamters){
         if (temperaturaMaxima <= temperatura){
             temperaturaMaxima = temperatura;
         }
-
+        
         if (temperaturaMinima >= temperatura){
             temperaturaMinima = temperatura;
         }
@@ -222,6 +222,6 @@ void app_main() {
     bufferUmidadeMaxima     = xQueueCreate(5,sizeof(uint16_t)); 
     bufferUmidadeMinima     = xQueueCreate(5,sizeof(uint16_t)); 
 
-    xTaskCreate(task_oLED,"task_oLED",2048, NULL, 1, NULL);
-    xTaskCreate(task_dht,"task_dht",2048,NULL, 2, NULL);
+    xTaskCreate(task_dht,"task_dht",2048,NULL, 1, NULL);
+    xTaskCreate(task_oLED,"task_oLED",2048, NULL, 2, NULL);
 }
