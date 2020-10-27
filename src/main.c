@@ -5,10 +5,16 @@
 #include "driver/gpio.h"
 #include <u8g2.h>
 #include "u8g2_esp32_hal.h"
+/*#include "sdkconfig.h"
+#include <dht.h>
+#include <ultrasonic.h>*/
 
-#define DHT_GPIO        GPIO_NUM_0
+#define TRIG            GPIO_NUM_0
+#define ECHO            GPIO_NUM_2
 #define PIN_SDA         GPIO_NUM_5
 #define PIN_SCL         GPIO_NUM_4
+#define DHT_GPIO        GPIO_NUM_14
+#define BUTTON          GPIO_NUM_16
 
 static const char *TAG = "EX10";
 //static const dht_sensor_type_t sensor_type = DHT_TYPE_DHT11;
@@ -16,19 +22,20 @@ static const gpio_num_t dht_gpio = DHT_GPIO;
 u8g2_t u8g2;
 QueueHandle_t bufferTemperatura; 
 
-void app_main (void);
+void app_main(void);
+void inicializarDisplay(void);
+void inicializarGpio(void);
 void imprimirCabecalho(void);
 void imprimirGrafico(int eixoX, int eixoY, int valor);
 void task_dht(void *pvParamters);
 void task_oLED(void *pvParameters);
 
-void task_dht(void *pvParamters)
-{
+void task_dht(void *pvParamters){
     int16_t temperatura;
     int16_t umidade;
     gpio_set_pull_mode( dht_gpio , GPIO_PULLUP_ONLY);
-    while(1)
-    {
+    
+    while(1){
         umidade     = esp_random()/100000000;
         temperatura = esp_random()/100000000;
 
@@ -53,8 +60,7 @@ void task_dht(void *pvParamters)
     }
 }
 
-void task_oLED(void *pvParameters)
-{
+void inicializarDisplay(){
 	u8g2_esp32_hal_t u8g2_esp32_hal = U8G2_ESP32_HAL_DEFAULT;
 	u8g2_esp32_hal.sda = PIN_SDA;
 	u8g2_esp32_hal.scl = PIN_SCL;
@@ -72,19 +78,33 @@ void task_oLED(void *pvParameters)
 
     u8g2_ClearBuffer(&u8g2);
     u8g2_SetFont(&u8g2,u8g2_font_6x10_mf);
-    
     u8g2_SendBuffer(&u8g2);
+}
+
+void inicializarGpio(){
+    gpio_pad_select_gpio(BUTTON);
+    gpio_set_direction(BUTTON, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(BUTTON, GPIO_PULLUP_ONLY);
+}
+
+void task_oLED(void *pvParameters){
     uint16_t temp;
     char stringTemperatura[10];
-    while(1)
-    {
-        xQueueReceive(bufferTemperatura,&temp,pdMS_TO_TICKS(2000));
-        
+    
+    inicializarDisplay();
+    inicializarGpio();
+
+    while(1) {
         imprimirCabecalho();
-        u8g2_DrawUTF8(&u8g2, 15, 30, "Umidade (%): ");
-        sprintf(stringTemperatura, "%d", temp);
-        u8g2_DrawUTF8(&u8g2, 80, 30, stringTemperatura);
-        imprimirGrafico(15, 30, temp);
+        
+        if (!gpio_get_level(BUTTON)){
+            xQueueReceive(bufferTemperatura,&temp,pdMS_TO_TICKS(2000));
+            
+            u8g2_DrawUTF8(&u8g2, 15, 30, "Umidade (%): ");
+            sprintf(stringTemperatura, "%d", temp);
+            u8g2_DrawUTF8(&u8g2, 80, 30, stringTemperatura);
+            imprimirGrafico(15, 35, temp);
+        }
     }
 }
 
