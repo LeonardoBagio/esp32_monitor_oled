@@ -12,13 +12,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#define TRIG            GPIO_NUM_0
-#define ECHO            GPIO_NUM_2
+#define DHT_GPIO        GPIO_NUM_0
+#define TRIG            GPIO_NUM_2
 #define PIN_SDA         GPIO_NUM_5
 #define PIN_SCL         GPIO_NUM_4
-#define DHT_GPIO        GPIO_NUM_14
+#define ECHO            GPIO_NUM_14
 #define BUTTON          GPIO_NUM_16
 #define EIXO_X          10
+#define MAX_DISTANCE_CM 500
 
 static const dht_sensor_type_t sensor_type = DHT_TYPE_DHT11;
 static const gpio_num_t dht_gpio = DHT_GPIO;
@@ -30,6 +31,9 @@ QueueHandle_t bufferTemperaturaMinima;
 QueueHandle_t bufferUmidade;
 QueueHandle_t bufferUmidadeMaxima;
 QueueHandle_t bufferUmidadeMinima;
+QueueHandle_t bufferDistancia;
+QueueHandle_t bufferDistanciaMaxima;
+QueueHandle_t bufferDistanciaMinima;
 
 void app_main(void);
 void inicializarDisplay(void);
@@ -39,6 +43,7 @@ void imprimirUmidade(void);
 void imprimirDistancia(void);
 void imprimirGrafico(int eixoX, int eixoY, int valor, char porcentagem[10]);
 void task_dht(void *pvParamters);
+void task_ultrasonic(void *pvParamters);
 void task_oLED(void *pvParameters);
 
 void task_dht(void *pvParamters){
@@ -49,7 +54,7 @@ void task_dht(void *pvParamters){
     int temperaturaMinima   = 100;
     int umidadeMinima       = 100;
 
-    gpio_set_pull_mode( dht_gpio , GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(dht_gpio, GPIO_PULLUP_ONLY);
     
     while(1){
         dht_read_data(sensor_type, dht_gpio, &umidade, &temperatura);
@@ -86,6 +91,38 @@ void task_dht(void *pvParamters){
         
         vTaskDelay(1500/portTICK_PERIOD_MS);
     }
+}
+
+void task_ultrasonic(void *pvParamters) {
+    uint32_t distancia;
+	float distanciaMaxima = 0;
+    float distanciaMinima = 100;
+    
+    ultrasonic_sensor_t sensor = {
+		.trigger_pin = TRIG,
+		.echo_pin = ECHO};
+	ultrasonic_init(&sensor);
+
+	while (1) {
+        ultrasonic_measure_cm(&sensor, MAX_DISTANCE_CM, &distancia);
+
+        xQueueReceive(bufferDistanciaMaxima,&distanciaMaxima,pdMS_TO_TICKS(0));
+        xQueueReceive(bufferDistanciaMinima,&distanciaMinima,pdMS_TO_TICKS(0));        
+
+        if (distanciaMaxima <= distancia){
+            distanciaMaxima = distancia;
+        }
+
+        if (distanciaMinima >= distancia){
+            distanciaMinima = distancia;
+        }         
+
+        xQueueSend(bufferDistancia,&distancia,pdMS_TO_TICKS(0));
+        xQueueSend(bufferDistanciaMaxima,&distanciaMaxima,pdMS_TO_TICKS(0));
+        xQueueSend(bufferDistanciaMinima,&distanciaMinima,pdMS_TO_TICKS(0));        
+
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+	}
 }
 
 void inicializarDisplay(){
@@ -196,10 +233,31 @@ void imprimirUmidade(){
 }
 
 void imprimirDistancia(){
+    uint16_t distancia;
+    uint16_t maxima;
+    uint16_t minima;
+    char stringDistancia[10];
+    char stringMaxima[10];
+    char stringMinima[10];
+
     u8g2_ClearBuffer(&u8g2);
     u8g2_DrawFrame(&u8g2, 0, 0, 128, 64);
-    u8g2_DrawUTF8(&u8g2, 15, 15, "Distancia");
-    imprimirGrafico(15, 35, 100, "100");
+    u8g2_DrawUTF8(&u8g2, EIXO_X, 15, "Distancia");
+    
+    xQueueReceive(bufferDistancia,&distancia,pdMS_TO_TICKS(2000));
+    xQueueReceive(bufferDistanciaMaxima,&maxima,pdMS_TO_TICKS(2000));
+    xQueueReceive(bufferDistanciaMinima,&minima,pdMS_TO_TICKS(2000));    
+    
+    sprintf(stringDistancia, "%d", distancia);
+    sprintf(stringMaxima, "%d", maxima);
+    sprintf(stringMinima, "%d", minima);
+
+    u8g2_DrawUTF8(&u8g2, EIXO_X, 60, "Max:");
+    u8g2_DrawUTF8(&u8g2, EIXO_X + 25, 60, stringMaxima);
+    u8g2_DrawUTF8(&u8g2, 75, 60, "Min:");
+    u8g2_DrawUTF8(&u8g2, 100, 60, stringMinima);
+
+    imprimirGrafico(EIXO_X, 25, distancia, stringDistancia);     
 }
 
 void imprimirGrafico(int eixoX, int eixoY, int valor, char porcentagem[10]){
@@ -221,7 +279,11 @@ void app_main() {
     bufferUmidade           = xQueueCreate(5,sizeof(uint16_t));
     bufferUmidadeMaxima     = xQueueCreate(5,sizeof(uint16_t)); 
     bufferUmidadeMinima     = xQueueCreate(5,sizeof(uint16_t)); 
+    bufferDistancia         = xQueueCreate(5,sizeof(uint16_t));
+    bufferDistanciaMaxima   = xQueueCreate(5,sizeof(uint16_t));
+    bufferDistanciaMinima   = xQueueCreate(5,sizeof(uint16_t));
 
     xTaskCreate(task_dht,"task_dht",2048,NULL, 1, NULL);
     xTaskCreate(task_oLED,"task_oLED",2048, NULL, 2, NULL);
+    xTaskCreate(task_ultrasonic, "task_ultrasonic", configMINIMAL_STACK_SIZE * 3, NULL, 3, NULL);
 }
